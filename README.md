@@ -36,7 +36,7 @@ The method is selected from the measured fraction of Bensolve LB solution vector
 
 ## Benchmark data
 
-- **TOFLP:** 120 generated instances, provided in [`data/generated/TOFLP.zip`](data/generated/TOFLP.zip).
+- **TOFLP:** 120 generated instances, provided in [`data/generated/TOFLP.zip`](data/generated/TOFLP.zip). See the [TOFLP model and data README](data/generated/TOFLP/README.md).
 - **TOMIPLIB:** five generated instances, provided in [`data/generated/TOMIPLIB.zip`](data/generated/TOMIPLIB.zip).
 - **MOAP and MOKP:** externally hosted benchmark instances from Kirlik and Sayın (2014); this repository does not duplicate those files. See [`data/external/README.md`](data/external/README.md) for the source and publication links.
 
@@ -50,4 +50,4 @@ The MPS/VLP/Bensolve file readers and a complete experiment driver still need to
 
 ## Paper
 
-An, Parragh, Sinnl & Tricoire (2023). *A matheuristic for tri-objective binary integer linear programming*. Computers & Operations Research, 161, 106397. https://doi.org/10.1016/j.cor.2023.106397
+An, D., Lee, C. and Parragh, S. N. (2024). *A matheuristic for tri-objective binary integer linear programming*. Computers & Operations Research, 161, 106397. https://doi.org/10.1016/j.cor.2023.106397

@@ -12,9 +12,9 @@ The multi-objective knapsack problem instances are sourced from Kirlik and Sayı
 
 ## TOFLP
 
-The tri-objective facility-location instances are generated from the bi-objective single-source capacitated facility-location instances introduced by [Gadegaard et al. (2019)](https://www.sciencedirect.com/science/article/pii/S0305054823002617#b23). Total customer-demand coverage is added as the third objective (see Appendix A.3 of the paper).
+The tri-objective facility-location instances extend the bi-objective single-source capacitated facility-location model of Gadegaard et al. (2019) by adding total covered customer demand as the third objective. The model, assumptions, instance naming convention and file layout are documented in [data/generated/TOFLP/README.md](../data/generated/TOFLP/README.md).
 
-The set contains 12 subclasses, with 10 instances per subclass (120 instances). The classes vary the number of facilities from 5 to 60 in increments of five; each instance has twice as many customers as facilities. The supplied archive is [data/generated/TOFLP.zip](../data/generated/TOFLP.zip).
+The set contains 12 subclasses, with 10 instances per subclass (120 instances). The number of facilities ranges from 5 to 60 in increments of five; each instance has twice as many customers as facilities. The supplied archive is [data/generated/TOFLP.zip](../data/generated/TOFLP.zip).
 
 ## TOMIPLIB
 
