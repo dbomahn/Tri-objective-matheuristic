@@ -2,7 +2,7 @@
 
 Julia implementation accompanying **A matheuristic for tri-objective binary integer linear programming**.
 
-The code is being reorganised into a reusable solver-independent search core. The search no longer depends on top-level global JuMP models or global variable bindings.
+The code is organised as a reusable search core. The search does not depend on top-level global JuMP models or global variable bindings.
 
 ## Structure
 
@@ -11,8 +11,8 @@ The code is being reorganised into a reusable solver-independent search core. Th
 - `src/FeasibilityPump.jl`: fractional feasibility-pump search and solution filtering.
 - `src/GenericPathRelinking.jl`: generic path relinking.
 - `src/Matheuristic.jl`: fractionality-based FP⁺/FPGPR dispatch.
-- `scripts/legacy/`: unmodified historical experiment drivers retained for provenance.
-- `data/`: benchmark instance locations; data files will be uploaded separately.
+- `scripts/legacy/`: historical experiment drivers retained for provenance.
+- `data/`: benchmark archives and references to externally hosted benchmark sets.
 - `docs/`: architecture, benchmark provenance and source audit.
 
 All Julia source files use the `.jl` extension.
@@ -36,13 +36,17 @@ The method is selected from the measured fraction of Bensolve LB solution vector
 
 ## Benchmark data
 
-The instance files are not included yet. Their intended locations and published construction methodology are described in [docs/instance_generation.md](docs/instance_generation.md). The original TOFLP/TOMIPLIB generation scripts are unavailable; the repository documents their published provenance rather than claiming to regenerate the files.
+- **TOFLP:** 120 generated instances, provided in [`data/generated/TOFLP.zip`](data/generated/TOFLP.zip).
+- **TOMIPLIB:** five generated instances, provided in [`data/generated/TOMIPLIB.zip`](data/generated/TOMIPLIB.zip).
+- **MOAP and MOKP:** externally hosted benchmark instances from Kirlik and Sayın (2014); this repository does not duplicate those files. See [`data/external/README.md`](data/external/README.md) for the source and publication links.
 
-## Validation status
+The benchmark provenance and published construction methodology are described in [`docs/instance_generation.md`](docs/instance_generation.md). The original TOFLP/TOMIPLIB generation scripts are unavailable; the repository documents their published provenance rather than claiming to regenerate the files.
 
-The core has been refactored to remove global model references, initialise path iteration state, repair the undefined flip index, handle insufficient candidate sets, restore temporary variable fixings, and preserve solution/objective pairing during Pareto filtering.
+## Validation and remaining integration
 
-A Julia runtime and solver execution environment were not available during this correction, so the test suite has been added but has **not yet been executed**. The MPS/VLP/Bensolve file readers and a full experiment driver remain to be integrated once the actual instance and solution file formats are available.
+The package test suite passes in [GitHub Actions](https://github.com/dbomahn/Tri-objective-matheuristic/actions/runs/42889138992). These tests validate the current core implementation; they do not constitute a reproduction of the paper's computational experiments.
+
+The MPS/VLP/Bensolve file readers and a complete experiment driver still need to be integrated and validated against the supplied benchmark formats. A full benchmark run has not yet been claimed.
 
 ## Paper
 
