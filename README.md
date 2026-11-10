@@ -50,4 +50,4 @@ The MPS/VLP/Bensolve file readers and a complete experiment driver still need to
 
 ## Paper
 
-An, D., Lee, C. and Parragh, S. N. (2024). *A matheuristic for tri-objective binary integer linear programming*. Computers & Operations Research, 161, 106397. https://doi.org/10.1016/j.cor.2023.106397
+An, Parragh, Sinnl & Tricoire (2023). *A matheuristic for tri-objective binary integer linear programming*. Computers & Operations Research, 161, 106397. https://doi.org/10.1016/j.cor.2023.106397
