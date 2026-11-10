@@ -1,0 +1,14 @@
+# Julia
+Manifest.toml
+*.ji
+.julia/
+
+# Experiment outputs
+results/
+*.log
+*.csv
+*.jld2
+
+# Editor / operating system
+.vscode/
+.DS_Store
