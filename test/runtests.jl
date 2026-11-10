@@ -32,6 +32,9 @@ end
     @test !any(is_fixed, ctx.binary_variables)
     @test fbsearch(ctx, [0, 0]) !== nothing
     @test length(getobjval([1, 0], ctx)) == 3
+    result = FPGPR(ctx, [[0.5, 0.0], [1.0, 0.5]], 0.0)
+    @test result.method == :FPGPR
+    @test result.new_solutions == 0
 end
 
 @testset "Degenerate path-relinking input" begin

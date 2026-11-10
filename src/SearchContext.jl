@@ -16,7 +16,7 @@ struct SearchContext{M1,M2,V1,V2,R}
         size(C, 2) == length(binary_variables) ||
             throw(DimensionMismatch("Objective matrix and variable dimensions differ."))
         length(binary_variables) == length(relaxation_variables) ||
-            throw(DimensionMismatch("Integer and relaxation models have different dimensions."))
+            throw(DimensionMismatch("Integer and relaxation model dimensions differ."))
         new{typeof(integer_model),typeof(relaxation_model),typeof(binary_variables),
             typeof(relaxation_variables),typeof(rng)}(
             integer_model, relaxation_model, binary_variables, relaxation_variables,
@@ -28,7 +28,7 @@ nvariables(ctx::SearchContext) = length(ctx.binary_variables)
 getobjval(x, C::AbstractMatrix) = vec(C * x)
 getobjval(x, ctx::SearchContext) = getobjval(x, ctx.C)
 
-"""Check feasibility while always removing temporary fixings afterwards."""
+"""Check feasibility while always removing temporary variable fixings afterwards."""
 function feasible_integer(ctx::SearchContext, candidate::AbstractVector{<:Real})
     length(candidate) == nvariables(ctx) ||
         throw(DimensionMismatch("Candidate has the wrong number of variables."))
@@ -54,15 +54,8 @@ function fbsearch(ctx::SearchContext, rounded::AbstractVector{<:Integer})
         throw(DimensionMismatch("Candidate has the wrong number of variables."))
     x = ctx.relaxation_variables
     idx0, idx1 = findall(==(0), rounded), findall(==(1), rounded)
-    distance = AffExpr(0.0)
-    for i in idx0
-        add_to_expression!(distance, 1.0, x[i])
-    end
-    for j in idx1
-        add_to_expression!(distance, -1.0, x[j])
-    end
-    add_to_expression!(distance, length(idx1))
-    @objective(ctx.relaxation_model, Min, distance)
+    @objective(ctx.relaxation_model, Min,
+        sum(x[i] for i in idx0) + sum(1.0 - x[j] for j in idx1))
     optimize!(ctx.relaxation_model)
     return has_values(ctx.relaxation_model) ? value.(x) : nothing
 end

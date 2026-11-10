@@ -15,13 +15,14 @@ The original experiment scripts are retained under `scripts/legacy/` for provena
 ## Defects corrected in the reusable core
 
 1. **Global solver state:** replaced references to global `mip`, `mx`, `dist` and `x` with an explicit `SearchContext` passed to every routine.
-2. **Temporary variable fixings:** feasibility checks now remove their fixings in a `finally` block, including when optimisation throws an exception.
-3. **Undefined flip index:** the multi-bit perturbation now flips the sampled coordinate `j), not the undefined variable `r`.
+2. **Temporary variable fixings:** feasibility checks now remove temporary fixings in a `finally` block, including when optimisation throws an exception.
+3. **Undefined flip index:** the multi-bit perturbation now flips the sampled coordinate rather than the undefined `r`.
 4. **Uninitialised GPR iteration counter:** path iteration is local to each relinking path.
-5. **Insufficient candidate sets:** fractional pump and GPR return safely when fewer than two starting solutions are available.
+5. **Insufficient candidate sets:** FP and GPR return safely when fewer than two starting solutions are available.
 6. **Neighbourhood alignment:** explored neighbours are filtered together with their corresponding objective vectors.
 7. **Pareto filtering:** solution/objective pairing is retained while dominated points and duplicate objective vectors are removed.
 8. **Fractionality dispatch:** the dispatcher measures the proportion of LB solution vectors containing fractional variables and applies the paper's 20% threshold.
+9. **FPGPR flow:** the new implementation retains the two phases visible in the historical FPGPR routine: feasibility-pump intensification during path relinking, followed by a pure GPR phase. The uninitialised `gn` counter was unnecessary and removed.
 
 ## Historical driver defects retained for reference
 
@@ -37,4 +38,4 @@ This does not match the published TOFLP construction (Gadegaard et al. single-so
 
 ## Validation status
 
-A focused Julia test suite has been added for Pareto filtering, fractionality dispatch, feasibility fixing/unfixing, LP projection and degenerate path-relinking inputs. It has **not been executed** because no Julia runtime is available in the current environment. Consequently, the code changes are source-level corrections, not a claim of runtime validation.
+A Julia test suite has been added for Pareto filtering, fractionality dispatch, feasibility fixing/unfixing, LP projection and degenerate path-relinking inputs. It has **not yet been executed**. A GitHub Actions workflow is configured to run `Pkg.test()` on pushes and pull requests. The source correction is not described as runtime-validated until that workflow completes successfully.
