@@ -1,160 +1,110 @@
-# Feasibility-pump and shared solution-processing routines.
-# Extracted from phd/codes/FPGPRfunctions.jl; see docs/source_audit.md.
+function flip(x::AbstractVector{<:Integer}, position::Int)
+    y = copy(x)
+    y[position] = 1 - y[position]
+    return y
+end
 
-function flip(x_h,j,e)
-    if x_h[e[j]]==1
-        x_h[e[j]] = 0
-    else
-        x_h[e[j]] = 1
+"""Find an unvisited one-bit or multi-bit perturbation, or return nothing."""
+function flipoper(ctx::SearchContext, tabu, fractional, rounded)
+    n = length(rounded)
+    n == 0 && return nothing
+    for j in sortperm(abs.(fractional .- rounded); rev=true)
+        candidate = flip(rounded, j)
+        candidate in tabu || return candidate
     end
-    return x_h
-end
-function flipoper(Tabu,x_t,x_r)
-    e = sortperm(abs.(x_t-x_r),rev=true)
-    xi = []
-    x_h = copy(x_r)
-    j = 1
-    M=length(x_t) #
-    while j<=M && xi==[]
-        x_h = flip(x_h,j,e)
-        if x_h ∉ Tabu
-            xi=x_h
-        else
-            j+=1
-        end
-    end
-    if xi==[]
-        while j<=M
-            x_h=copy(x_r)
-            Num = Int64(rand(ceil(length(x_r)/2):length(x_r)-1))
-            R = sample(1:M,Num, replace=false)
-            for i in R
-                x_h = flip(x_h,r)
-                if x_h ∉ Tabu
-                    xi = x_h
-                end
+    if n > 1
+        for _ in 1:min(n, 10)
+            count = rand(ctx.rng, ceil(Int, n / 2):(n - 1))
+            positions = randperm(ctx.rng, n)[1:count]
+            candidate = copy(rounded)
+            for j in positions
+                candidate[j] = 1 - candidate[j]
             end
-            j+=1
+            candidate in tabu || return candidate
         end
     end
-    return xi
+    return nothing
 end
-function FBcheck(xx,n)
-    for k=1:n
-        JuMP.fix(mx[k],xx[k]; force=true)
+
+"""True if x is weakly dominated by a point in P (maximisation)."""
+dominated(x, P) = any(p -> all(x .<= p), P)
+
+"""Pareto-filter maximisation points while preserving solution/objective pairing."""
+function pareto_filter(solutions, objectives)
+    length(solutions) == length(objectives) ||
+        throw(DimensionMismatch("Solution and objective collections must have equal length."))
+    keep = trues(length(objectives))
+    for i in eachindex(objectives)
+        keep[i] || continue
+        for j in eachindex(objectives)
+            (i == j || !keep[j]) && continue
+            oi, oj = objectives[i], objectives[j]
+            if all(oi .>= oj) && any(oi .> oj)
+                keep[j] = false
+            elseif all(oj .>= oi) && any(oj .> oi)
+                keep[i] = false
+                break
+            elseif oi == oj && j > i
+                keep[j] = false
+            end
+        end
     end
-    optimize!(mip)
-    if termination_status(mip) == MOI.OPTIMAL
-        return true
-    else
-        return false
-    end
+    idx = findall(keep)
+    return solutions[idx], objectives[idx]
 end
-function fbsearch(x_r) #solveLP
-    idx0 = findall(k->k==0, x_r)
-    idx1 = findall(k->k==1, x_r)
-    @objective( dist, Min, sum(x[i] for i in idx0) + sum(1-(x[j]) for j in idx1) )
-    optimize!(dist)
-    if termination_status(dist) == MOI.OPTIMAL
-        return JuMP.value.(x)
-    else
-        return 0;
-    end
-end
-function getobjval(x,C)
-    return [dot(x,C[1,:]),dot(x,C[2,:]),dot(x,C[3,:])]
-end
-function dominated(x,P)
-    st = false
-    for k=1:length(P)
-        if all( x .>= P[k])# && any(x > P[k])
-            st=true; break
-        else
+
+"""
+Fractional feasibility-pump search from the Bensolve LB decision vectors.
+Returns all starting and newly found feasible integer vectors, plus the number
+of newly found vectors. Their objective values are recomputed by the caller.
+"""
+function fractionalFP(ctx::SearchContext, initial_solutions, time_limit::Real;
+                      max_iterations::Int=10)
+    time_limit >= 0 || throw(ArgumentError("time_limit must be non-negative."))
+    X = [Float64.(x) for x in initial_solutions]
+    length(X) < 2 && return X, 0
+    tabu = Vector{Vector{Int}}()
+    explored_pairs = Set{Tuple{Int,Int}}()
+    new_solutions = 0
+    deadline = time() + time_limit
+
+    while time() < deadline && length(X) >= 2
+        i, j = sort(randperm(ctx.rng, length(X))[1:2])
+        pair = (i, j)
+        if pair in explored_pairs
+            length(explored_pairs) >= binomial(length(X), 2) && break
             continue
         end
-    end
-
-    return st
-end
-function domFilter(sol,obj)
-    copysol = Dict(); copyobj = Dict();
-    for i=1:length(obj)
-    	copysol[i] = sol[i]
-        copyobj[i] = obj[i]
-    end
-    for i=1:length(obj)-1
-        for j=i+1:length(obj)
-            if all(obj[i] .>= obj[j]) == true #dominated by PF[j]
-                copyobj[i]=nothing; copysol[i]=nothing;break
-            elseif all(obj[j] .>= obj[i]) == true
-                copyobj[j]=nothing; copysol[j]=nothing;
+        push!(explored_pairs, pair)
+        lambda = rand(ctx.rng, 0:10) / 10
+        target = lambda .* X[i] .+ (1 - lambda) .* X[j]
+        for _ in 1:max_iterations
+            time() >= deadline && break
+            rounded = round.(Int, target)
+            already_present = any(x -> round.(Int, x) == rounded, X)
+            if !already_present && feasible_integer(ctx, rounded)
+                push!(X, Float64.(rounded))
+                new_solutions += 1
+                break
             end
-        end
-    end
-    finalsol = filter!(a->a!=nothing, collect(values(copysol)))
-    finalobj = filter!(a->a!=nothing, collect(values(copyobj)))
-    return finalsol,finalobj
-end
-function Postpro(initX,initY,dvar,LB,newsol)
-    P = union(initX,dvar[end-newsol+1:end]); Pobj = union(initY,LB[end-newsol+1:end])
-    #Filter dominated solutions
-    copysol = Dict(); copyobj = Dict();
-    for i=1:length(Pobj)
-        copysol[i] = P[i]; copyobj[i] = Pobj[i]
-    end
-    for i=1:length(Pobj)-1
-        for j=i+1:length(Pobj)
-            if all(Pobj[i] .>= Pobj[j]) == true #dominated by PF[j]
-                copyobj[i]=nothing; copysol[i]=nothing; break
-            elseif all(Pobj[j] .>= Pobj[i]) == true
-                copyobj[j]=nothing; copysol[j]=nothing;
-            end
-        end
-    end
-    finalsol = filter!(a->a!=nothing, collect(values(copysol)))
-    finalobj = filter!(a->a!=nothing, collect(values(copyobj)))
-    return finalsol,finalobj
-end
-#############################    Feasibility Pump   ############################
-function fractionalFP(dvar,n,C,TL)
-    X = copy(dvar); IGPair=[]; Tabu = []; newsol=0; t0=time(); #Y = copy(LB);
-    while time()-t0 < TL
-        I,G = sample(1:length(X), 2, replace=false)
-        x1 = X[I]; x2 = X[G];
-        λ = round(rand(Float64, 1)[1]; digits=1)
-        x_t = x1*λ + x2*(1-λ); SearchDone = false; iter=0; Max_iter = 10
-        while [I,G]∉IGPair && iter<Max_iter && SearchDone == false
-            x_r = round.(Int,x_t)
-            if ( (FBcheck(x_r,n) == true) && (x_r∉X) )
-                push!(X,x_r); #Y = [Y; getobjval(x_r,C)'];
-                newsol+=1; SearchDone = true
-            else
-                if x_r ∈ Tabu
-                    x_r = flipoper(Tabu,x_t,x_r)
-                    if x_r==[]
-                        SearchDone = true
-                    else
-                        if ( (FBcheck(x_r,n) == true) && (x_r∉X) )
-                            push!(X,x_r); #Y = [Y; getobjval(x_r,C)'];
-                            newsol+=1; SearchDone = true;
-                        end
-                    end
-                end
-                if time()-t0 >= TL
+            if rounded in tabu
+                alternative = flipoper(ctx, tabu, target, rounded)
+                alternative === nothing && break
+                rounded = alternative
+                already_present = any(x -> round.(Int, x) == rounded, X)
+                if !already_present && feasible_integer(ctx, rounded)
+                    push!(X, Float64.(rounded))
+                    new_solutions += 1
                     break
                 end
-                if SearchDone == false
-                    push!(Tabu,x_r)
-                    x_t = fbsearch(x_r)
-                    if x_t == 0 #when there's no new feasible lp sol
-                        SearchDone = true
-                    end
-                end
             end
-			iter+=1
+            push!(tabu, copy(rounded))
+            target = fbsearch(ctx, rounded)
+            target === nothing && break
         end
-        push!(IGPair,[I,G])
     end
-    return X,newsol
+    return X, new_solutions
 end
-####################### Running Path Relinking  ##########################
+
+FPplus(ctx::SearchContext, initial_solutions, time_limit::Real; kwargs...) =
+    fractionalFP(ctx, initial_solutions, time_limit; kwargs...)

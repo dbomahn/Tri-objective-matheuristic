@@ -1,154 +1,95 @@
-# Generic path-relinking routines.
-# Extracted from phd/codes/FPGPRfunctions.jl; see docs/source_audit.md.
-
-function createNB(SI,C,dif,exploredSI)
-    neibour = []; neiobj = [];
-    for i in dif
-        cpSI = copy(SI)
-        if cpSI[i] == round(cpSI[i]) #if vari is int value
-            if cpSI[i] == 1
-                cpSI[i] = 0
-            else
-                cpSI[i] = 1
+"""Generate unvisited neighbours along the differing coordinates."""
+function createNB(ctx::SearchContext, solution, differing_indices, explored)
+    neighbours = Vector{Vector{Float64}}()
+    objectives = Vector{Vector{Float64}}()
+    for i in differing_indices
+        values = isapprox(solution[i], round(solution[i]); atol=1e-8) ?
+            (1.0 - round(solution[i]),) : (1.0, 0.0)
+        for value_ in values
+            candidate = Float64.(solution)
+            candidate[i] = value_
+            if !(candidate in explored)
+                push!(neighbours, candidate)
+                push!(objectives, getobjval(candidate, ctx))
             end
-            push!(neibour, cpSI);
-            push!(neiobj, getobjval(cpSI,C))
-        else #if vari is fractional
-            cpSI[i] = 1; push!(neibour, cpSI); push!( neiobj, getobjval(cpSI,C) )
-            cpSI = copy(SI)
-            cpSI[i] = 0; push!(neibour, cpSI); push!( neiobj, getobjval(cpSI,C) )
         end
     end
-    idx = findall(i-> neibour[i] in exploredSI, 1:length(neibour))
-    neibour = setdiff(neibour,exploredSI)
-    neiobj = neiobj[setdiff(1:end, idx),:]
-    return neibour,neiobj
-end
-function nextSI(neibour,neiobj,C,SI)
-    SIobj = getobjval(SI,C)
-    for i=1:length(neiobj)
-        if length(neiobj) == 1  #if there is one candiate sol
-            return neibour[1]#,neiobj[1]
-        else length(neiobj) > 1 # if there are multiple candiates, check the improved ratio
-            ratiotb = zeros(length(neiobj),3)
-            for i=1:length(neiobj)
-                ratiotb[i,:] = neiobj[i]./SIobj
-            end
-            ranktb = zeros(length(neiobj),3)
-            for i=1:3
-                ranktb[:,i] = tiedrank(ratiotb[:,i])
-            end
-            ranksum = [sum(ranktb[i,:]) for i=1:length(neiobj)]
-            mostimp = findall(x-> x == maximum(ranksum), ranksum)
-            k = rand(mostimp)[1]
-            return neibour[k]#, neiobj[k]
-        end
-    end
+    return neighbours, objectives
 end
 
-function GPR(candX,candY,C,n,TL)
-    IGPair=[]; exploredSI = []; newsol=0; t0=time();
-    while time()-t0 < TL
-	    I,G = sample(1:length(candX), 2, replace=false)
-        SI = candX[I]; SG = candX[G]; infeas=0; #Maxiter = length(candX)*10;  #if the algorithm finds infeasible solutions in a row, move to the next iteration
-        while all.(SI != SG) && [I,G]∉IGPair && iter<20 && (time()-t0<TL)
-            dif = findall(i-> SI[i]!=SG[i], 1:n)
-            neibour,neiobj = createNB(SI,C,dif,exploredSI)
-            if ( (length(neiobj)==0) || (time()-t0 >= TL) )
-                break
-            else
-                for l=1:length(neiobj)
-                    if ( (FBcheck(neibour[l],n)==true) && neibour[l]∉candX ) #dominance check (dominated(neiobj[l],LB)==false)
-                        push!(candX, neibour[l]); push!(candY, neiobj[l]);
-                        newsol+=1;
-                    end
+"""Select the next solution by summed ranks of its three objective ratios."""
+function nextSI(ctx::SearchContext, neighbours, neighbour_objectives, current)
+    isempty(neighbours) && return nothing
+    length(neighbours) == 1 && return only(neighbours)
+    current_objectives = getobjval(current, ctx)
+    ratios = Matrix{Float64}(undef, length(neighbour_objectives), 3)
+    for i in eachindex(neighbour_objectives), k in 1:3
+        denominator = current_objectives[k]
+        ratio = abs(denominator) > eps(Float64) ?
+            neighbour_objectives[i][k] / denominator :
+            neighbour_objectives[i][k] - current_objectives[k]
+        ratios[i, k] = isfinite(ratio) ? ratio :
+            neighbour_objectives[i][k] - current_objectives[k]
+    end
+    ranks = hcat((tiedrank(ratios[:, k]) for k in 1:3)...)
+    totals = vec(sum(ranks; dims=2))
+    best = findall(==(maximum(totals)), totals)
+    return neighbours[rand(ctx.rng, best)]
+end
+
+"""
+Generic path relinking. The iteration counter is local to each path and the
+routine safely returns when fewer than two starting solutions are available.
+"""
+function GPR(ctx::SearchContext, initial_solutions, initial_objectives, time_limit::Real;
+             max_path_iterations::Int=20)
+    time_limit >= 0 || throw(ArgumentError("time_limit must be non-negative."))
+    length(initial_solutions) == length(initial_objectives) ||
+        throw(DimensionMismatch("Solution and objective collections must have equal length."))
+    X = [Float64.(x) for x in initial_solutions]
+    Y = [Float64.(y) for y in initial_objectives]
+    length(X) < 2 && return X, Y, 0
+
+    deadline = time() + time_limit
+    explored = Vector{Vector{Float64}}()
+    tried_pairs = Set{Tuple{Int,Int}}()
+    added = 0
+
+    while time() < deadline && length(X) >= 2
+        pairs = [(i, j) for i in 1:length(X)-1 for j in i+1:length(X)
+                 if !((i, j) in tried_pairs)]
+        isempty(pairs) && break
+        pair = rand(ctx.rng, pairs)
+        push!(tried_pairs, pair)
+        i, j = pair
+        current = copy(X[i])
+        guiding = copy(X[j])
+
+        for _ in 1:max_path_iterations
+            time() >= deadline && break
+            all(k -> isapprox(current[k], guiding[k]; atol=1e-8), eachindex(current)) && break
+            differing = findall(k -> !isapprox(current[k], guiding[k]; atol=1e-8),
+                                eachindex(current))
+            neighbours, neighbour_objectives = createNB(ctx, current, differing, explored)
+            isempty(neighbours) && break
+
+            for k in eachindex(neighbours)
+                time() >= deadline && break
+                candidate = round.(Int, neighbours[k])
+                present = any(x -> round.(Int, x) == candidate, X)
+                if !present && feasible_integer(ctx, candidate)
+                    push!(X, Float64.(candidate))
+                    push!(Y, getobjval(candidate, ctx))
+                    added += 1
                 end
             end
-            SI = nextSI(neibour,neiobj,C,SI)
-            push!(exploredSI,SI);
-            iter+=1
+
+            next = nextSI(ctx, neighbours, neighbour_objectives, current)
+            next === nothing && break
+            push!(explored, copy(next))
+            current = next
         end
-        push!(IGPair,[I,G])
     end
-    return candX,candY,newsol
-end
-
-
-function FPGPR(dvar,LB,n,C,TL)
-    candX = copy(dvar); candY = copy(LB); IGPair=[];  newsol=0;
-	gMax = 20; giter=0;	exploredSI = []; Tabu = []; t0=time();
-    while time()-t0 < TL #&& newsol<=length(candY)*0.5
-        I,G = sample(1:length(candY), 2, replace=false) #BASIC VER
-		SI = candX[I]; SG = candX[G];
-        while all.(SI != SG) && [I,G]∉IGPair && giter<gMax
-			dif = findall(i-> SI[i]!=SG[i], 1:n)
-			neibour,neiobj = createNB(SI,C,dif,exploredSI)
-			if length(neibour)==0
-				break
-			else
-				for l=1:length(neibour)
-					SearchDone = false; fiter=0; fMax = 10;
-					while fiter<fMax && SearchDone == false && time()-t0 <TL
-						x_r = round.(Int,neibour[l])
-						fx = getobjval(x_r,C)
-			            if ( (FBcheck(x_r,n) == true) && (fx ∉ candY) ) #checking feasibility and dominance   #z[1]<=fmax[1]-1 && z[2]<=fmax[2]-1 && z[3]<=fmax[3]-1)
-			                push!(candX,x_r); push!(candY,fx)#Y = [Y; getobjval(x_r,C)'];
-			                newsol+=1; SearchDone = true
-			            else
-			                if x_r ∈ Tabu
-			                    x_r = flipoper(Tabu,neibour[l],x_r)
-			                    if x_r==[]
-			                        SearchDone = true
-			                    else
-			                        fx = getobjval(x_r,C)
-			                        if ( (FBcheck(x_r,n) == true) && (fx ∉ candY) )  #z[1]<=fmax[1]-1 && z[2]<=fmax[2]-1 && z[3]<=fmax[3]-1 )
-			                            push!(candX,x_r); push!(candY,fx)#Y = [Y; getobjval(x_r,C)'];
-			                            newsol+=1; SearchDone = true;# push!(sucess,[I,G])
-			                        end
-			                    end
-			                end
-			                if SearchDone == false
-			                    push!(Tabu,x_r)
-			                    x_t = fbsearch(x_r)
-			                    if x_t == 0 #when there's no new feasible lp sol
-			                        SearchDone = true
-			                    end
-			                end
-			            end
-						fiter+=1
-        			end
-				end
-			end
-			SI = nextSI(neibour,neiobj,C,SI)
-			push!(exploredSI,SI);
-			giter+=1
-		end
-		push!(IGPair,[I,G])
-    end
-
-	while time()-t0 < TL
-		I,G = sample(1:length(candY), 2, replace=false) #BASIC VER
-		SI = candX[I]; SG = candX[G]; giter=0
-
-        while all.(SI != SG) && [I,G]∉IGPair && giter<gMax
-			dif = findall(i-> SI[i]!=SG[i], 1:n)
-			neibour,neiobj = createNB(SI,C,dif,exploredSI)
-			if length(neibour)==0
-				break
-			else
-				for l=1:length(neibour)
-					if FBcheck(neibour[l],n) && neibour[l]∉ candX
-						push!(candX, neibour[l]); candY = [candY; neiobj[l]']; #push!(candY, neiobj[l]);
-						newsol+=1; gn+=1;
-					end
-				end
-			end
-			SI = nextSI(neibour,neiobj,C,SI)
-			push!(exploredSI,SI);
-			giter+=1
-		end
-		push!(IGPair,[I,G])
-	end
-
-    return candX,candY,newsol
+    X, Y = pareto_filter(X, Y)
+    return X, Y, added
 end
