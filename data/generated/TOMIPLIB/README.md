@@ -35,4 +35,4 @@ The five instances used in the computational study are provided in [`TOMIPLIB.zi
 
 - MIPLIB 2017: [https://miplib.zib.de/](https://miplib.zib.de/).
 - Adelgren, N. and Gupte, A. (2022). The objective-coefficient generation approach is cited in the paper as a similar method; see the paper's bibliography for the full reference.
-- An, D., Lee, C. and Parragh, S. N. (2024). *A matheuristic for tri-objective binary integer linear programming*. Computers & Operations Research, 161, 106397. [https://doi.org/10.1016/j.cor.2023.106397](https://doi.org/10.1016/j.cor.2023.106397).
+- An, D., Parragh, S. N., Sinnl, M. and Tricoire, F. (2024). *A matheuristic for tri-objective binary integer linear programming*. Computers & Operations Research, 161, 106397. [https://doi.org/10.1016/j.cor.2023.106397](https://doi.org/10.1016/j.cor.2023.106397).
