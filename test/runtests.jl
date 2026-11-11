@@ -1,6 +1,7 @@
 using Test
 using JuMP
 using GLPK
+using Random
 using TriObjectiveMatheuristic
 
 @testset "Pareto filtering" begin
